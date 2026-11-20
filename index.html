@@ -157,13 +157,18 @@ load();renderAll();
 
  const msg=document.createElement('p');
  msg.className='hint';
- msg.textContent='点击后读取官方开奖数据，不会删除你的预测记录。';
+ msg.textContent='打开页面时会自动检查最新开奖。';
 
  actions.appendChild(btn);
  actions.after(msg);
 
- btn.addEventListener('click',async()=>{
-  msg.textContent='正在读取官方开奖数据…';
+ let syncing=false;
+
+ async function syncOfficial(showMessage){
+  if(syncing)return;
+  syncing=true;
+  if(showMessage)msg.textContent='正在检查最新开奖…';
+
   try{
    const response=await fetch('./data/draws.json?ts='+Date.now(),{cache:'no-store'});
    if(!response.ok)throw new Error('官方数据文件暂时无法读取');
@@ -184,13 +189,15 @@ load();renderAll();
 
     const issue=String(d.issue);
     const existed=merged.has(issue);
+    const old=merged.get(issue);
 
     merged.set(issue,{
      issue,
      red:d.red.slice().sort((a,b)=>a-b),
      blue:d.blue,
-     created:d.date?Date.parse(d.date+'T12:00:00+08:00'):Date.now(),
-     date:d.date||''
+     created:d.date?Date.parse(d.date+'T12:00:00+08:00'):(old?.created||Date.now()),
+     date:d.date||'',
+     source:'official'
     });
 
     if(existed)updated++;
@@ -201,11 +208,21 @@ load();renderAll();
     .sort((a,b)=>String(b.issue).localeCompare(String(a.issue)));
 
    persist();
-   msg.textContent='同步完成：新增 '+added+' 期，更新 '+updated+' 期；原有其他记录和预测已保留。';
+   msg.textContent='自动同步完成：新增 '+added+' 期，更新 '+updated+' 期。';
   }catch(e){
-   msg.textContent='同步失败：'+e.message+'。原有本机数据没有改变。';
+   if(showMessage)msg.textContent='同步失败：'+e.message+'；原有数据未改变。';
+  }finally{
+   syncing=false;
   }
- });
+ }
+
+ btn.addEventListener('click',()=>syncOfficial(true));
+
+ // 页面打开后自动同步
+ syncOfficial(true);
+
+ // 页面停留期间，每30分钟检查一次
+ setInterval(()=>syncOfficial(false),30*60*1000);
 })();
 </script>
 
