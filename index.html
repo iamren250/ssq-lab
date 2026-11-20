@@ -1,0 +1,147 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#b3262d">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="双色球实验室">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon.svg">
+<title>双色球实验室</title>
+<style>
+:root{--red:#b3262d;--red2:#d94b50;--blue:#2765b5;--bg:#f5f6f8;--card:#fff;--ink:#20242b;--muted:#747b86;--line:#e8eaf0}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;padding-bottom:28px}
+header{background:linear-gradient(135deg,#9f1f28,#cf4147);color:#fff;padding:24px 18px 20px}
+header h1{font-size:23px;margin:0 0 6px}header p{font-size:13px;margin:0;opacity:.9}
+main{max-width:760px;margin:0 auto;padding:14px}
+.tabs{display:flex;gap:8px;overflow:auto;margin:0 0 14px}
+.tab{border:0;border-radius:20px;background:#e8e9ed;padding:10px 15px;font-size:14px;color:#555;white-space:nowrap}
+.tab.active{background:var(--red);color:#fff}
+.panel{display:none}.panel.active{display:block}
+.card{background:var(--card);border-radius:15px;padding:16px;margin-bottom:13px;box-shadow:0 2px 10px #15213a0a}
+h2{font-size:17px;margin:0 0 12px}.hint{color:var(--muted);font-size:12px;line-height:1.6}
+.actions{display:flex;gap:9px;flex-wrap:wrap;margin-top:14px}
+button,.file-label{border:0;border-radius:10px;padding:11px 15px;font-size:14px;background:#eceef2;color:#303640}
+button.primary{background:var(--red);color:#fff}button.blue{background:var(--blue);color:#fff}button.danger{background:#fff0f0;color:#b3262d}
+button:disabled{opacity:.45}
+.numbers{display:flex;gap:7px;flex-wrap:wrap;align-items:center;margin:12px 0}
+.ball{width:36px;height:36px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;color:#fff;font-weight:700;font-size:14px;background:linear-gradient(#e96a70,#b3262d);box-shadow:inset 0 1px 2px #ffffff66}
+.ball.blueball{background:linear-gradient(#5c91db,#2765b5)}
+label{display:block;font-size:13px;color:#4c535e;margin:10px 0 5px}
+input{width:100%;border:1px solid #d9dde5;border-radius:9px;padding:12px;font-size:16px;background:#fff;color:#20242b}
+input:focus{outline:2px solid #e9b4b7;border-color:var(--red)}
+.gridstats{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+.stat{background:#f7f8fa;border-radius:11px;padding:12px}.stat b{display:block;font-size:22px;margin-bottom:3px}.stat span{font-size:12px;color:var(--muted)}
+.record{border-top:1px solid var(--line);padding:12px 0}.record:first-child{border-top:0}
+.recordtop{display:flex;justify-content:space-between;gap:10px;align-items:center;font-size:13px}
+.small{font-size:12px;color:var(--muted)}
+.notice{padding:10px 12px;background:#fff7e7;color:#815b16;border-radius:9px;font-size:12px;line-height:1.6}
+.empty{padding:18px;text-align:center;color:#9097a2;font-size:13px}
+footer{text-align:center;color:#999;font-size:11px;padding:8px}
+.hidden{display:none!important}
+</style>
+</head>
+<body>
+<header><h1>双色球实验室</h1><p>个人预测记录与开奖核对工具 · 仅供数据实验，不构成投注建议</p></header>
+<main>
+<div class="tabs">
+<button class="tab active" data-tab="predict">生成预测</button>
+<button class="tab" data-tab="predictions">预测记录</button>
+<button class="tab" data-tab="draws">开奖录入</button>
+<button class="tab" data-tab="stats">命中统计</button>
+<button class="tab" data-tab="backup">数据备份</button>
+</div>
+
+<section id="predict" class="panel active">
+<div class="card">
+<h2>生成一组预测号码</h2>
+<div class="hint">红球从 01–33 中选 6 个且不重复；蓝球从 01–16 中选 1 个。</div>
+<div id="newNumbers" class="numbers"><span class="hint">点击下方按钮生成号码</span></div>
+<div class="actions"><button class="primary" id="generate">生成号码</button><button id="savePrediction" disabled>保存本组预测</button></div>
+<p class="hint" id="predictMsg">生成后可保存到本机记录中。</p>
+</div>
+<div class="card"><h2>实验说明</h2><div class="notice">本工具只记录你生成的号码并与手动录入的开奖结果比对。随机生成不代表能提高中奖概率。数据默认保存在当前浏览器本机，清理浏览器数据可能导致记录丢失，请定期导出备份。</div></div>
+</section>
+
+<section id="predictions" class="panel">
+<div class="card"><h2>历史预测</h2><div id="predictionList"></div></div>
+</section>
+
+<section id="draws" class="panel">
+<div class="card">
+<h2>录入开奖结果</h2>
+<label for="issue">期号（例如 2026135）</label><input id="issue" inputmode="numeric" placeholder="输入开奖期号">
+<label for="drawRed">红球 6 个（用空格、逗号或顿号隔开）</label><input id="drawRed" placeholder="例如：04 06 10 15 26 27" autocomplete="off">
+<label for="drawBlue">蓝球 1 个</label><input id="drawBlue" inputmode="numeric" placeholder="例如：11">
+<div class="actions"><button class="primary" id="saveDraw">保存开奖结果并核对</button></div>
+<p class="hint" id="drawMsg">同一期号再次录入会更新该期数据。</p>
+</div>
+<div class="card"><h2>已录入开奖</h2><div id="drawList"></div></div>
+</section>
+
+<section id="stats" class="panel">
+<div class="card"><h2>实验统计</h2><div class="gridstats" id="statsGrid"></div><p class="hint" id="statsHint"></p></div>
+<div class="card"><h2>各等奖级命中记录</h2><div id="hitList"></div></div>
+</section>
+
+<section id="backup" class="panel">
+<div class="card"><h2>数据备份与恢复</h2><p class="hint">导出会把预测和开奖数据保存为 JSON 文件。换手机或浏览器前，请先导出；恢复时选择之前导出的备份文件。</p>
+<div class="actions"><button class="primary" id="export">导出备份</button><label class="file-label" for="importFile">选择备份文件</label><input class="hidden" type="file" id="importFile" accept=".json,application/json"></div>
+<p id="backupMsg" class="hint"></p>
+</div>
+<div class="card"><h2>清空本机数据</h2><p class="hint">此操作不可撤销。建议先导出备份。</p><button class="danger" id="clearData">清空全部数据</button></div>
+</section>
+</main>
+<footer>双色球实验室 · 数据仅保存在本机浏览器</footer>
+<script>
+const KEY='ssq_lab_v1';
+let data={predictions:[],draws:[]}, current=null;
+const $=id=>document.getElementById(id);
+function load(){try{const x=JSON.parse(localStorage.getItem(KEY)||'{}');data={predictions:Array.isArray(x.predictions)?x.predictions:[],draws:Array.isArray(x.draws)?x.draws:[]}}catch(e){data={predictions:[],draws:[]}}}
+function persist(){localStorage.setItem(KEY,JSON.stringify(data));renderAll()}
+function pad(n){return String(n).padStart(2,'0')}
+function balls(red,blue){return '<div class="numbers">'+red.map(n=>`<span class="ball">${pad(n)}</span>`).join('')+`<span class="ball blueball">${pad(blue)}</span></div>`}
+function randUnique(max,count){const a=[];while(a.length<count){const n=1+Math.floor(Math.random()*max);if(!a.includes(n))a.push(n)}return a.sort((a,b)=>a-b)}
+function generate(){current={red:randUnique(33,6),blue:1+Math.floor(Math.random()*16)};$('newNumbers').innerHTML=balls(current.red,current.blue);$('savePrediction').disabled=false;$('predictMsg').textContent='号码已生成；保存后才会进入历史记录。'}
+function fmt(t){return new Date(t).toLocaleString('zh-CN',{hour12:false})}
+function match(p,d){const r=p.red.filter(n=>d.red.includes(n)).length,b=p.blue===d.blue;return {r,b,level:level(p.red.filter(n=>d.red.includes(n)).length,b)}}
+function level(r,b){if(r===6&&b)return'一等奖';if(r===6)return'二等奖';if(r===5&&b)return'三等奖';if((r===5)|| (r===4&&b))return'四等奖';if((r===4)|| (r===3&&b))return'五等奖';if(b)return'六等奖';return'未中奖'}
+function savePrediction(){if(!current)return;data.predictions.unshift({id:Date.now()+Math.random(),red:[...current.red],blue:current.blue,created:Date.now()});persist();$('predictMsg').textContent='已保存。可以继续生成下一组。';current=null;$('savePrediction').disabled=true}
+function parseNums(s){return s.trim().split(/[\s,，、;；]+/).filter(Boolean).map(x=>Number(x))}
+function saveDraw(){
+ const issue=$('issue').value.trim(), red=parseNums($('drawRed').value), blue=Number($('drawBlue').value.trim());
+ if(!issue){$('drawMsg').textContent='请填写期号。';return}
+ if(red.length!==6||red.some(n=>!Number.isInteger(n)||n<1||n>33)||new Set(red).size!==6){$('drawMsg').textContent='红球必须是 6 个不重复的 01–33 数字。';return}
+ if(!Number.isInteger(blue)||blue<1||blue>16){$('drawMsg').textContent='蓝球必须是 01–16 的一个数字。';return}
+ red.sort((a,b)=>a-b);
+ const item={issue,red,blue,created:Date.now()},idx=data.draws.findIndex(d=>d.issue===issue);
+ if(idx>=0)data.draws[idx]=item;else data.draws.unshift(item);
+ data.draws.sort((a,b)=>String(b.issue).localeCompare(String(a.issue),'zh'));
+ persist();$('drawMsg').textContent=`第 ${issue} 期已保存，已自动核对历史预测。`;
+}
+function renderPredictions(){
+ const el=$('predictionList');if(!data.predictions.length){el.innerHTML='<div class="empty">还没有保存预测号码</div>';return}
+ el.innerHTML=data.predictions.map(p=>{const found=data.draws.map(d=>({d,m:match(p,d)})).filter(x=>x.m.level!=='未中奖'||x.d);return `<div class="record"><div class="recordtop"><b>${fmt(p.created)}</b><span class="small">${data.draws.length?'已按现有开奖数据核对':'等待开奖数据'}</span></div>${balls(p.red,p.blue)}<div class="small">${data.draws.length?data.draws.map(d=>{const m=match(p,d);return `${d.issue}期：红球中${m.r}个，${m.b?'蓝球命中':'蓝球未中'} · ${m.level}`}).join('<br>'):'暂无可核对的开奖数据'}</div></div>`}).join('')
+}
+function renderDraws(){const el=$('drawList');if(!data.draws.length){el.innerHTML='<div class="empty">还没有录入开奖结果</div>';return}
+el.innerHTML=data.draws.map(d=>`<div class="record"><div class="recordtop"><b>第 ${d.issue} 期</b><span class="small">${fmt(d.created)}</span></div>${balls(d.red,d.blue)}</div>`).join('')}
+function renderStats(){
+ const total=data.predictions.length,draws=data.draws.length,checked=total*draws;
+ let best=0,any=0,blue=0,hitLevels={};
+ data.predictions.forEach(p=>data.draws.forEach(d=>{const m=match(p,d);best=Math.max(best,m.r);if(m.r||m.b)any++;if(m.b)blue++;if(m.level!=='未中奖')hitLevels[m.level]=(hitLevels[m.level]||0)+1}));
+ $('statsGrid').innerHTML=[['预测组数',total],['已录入开奖期数',draws],['预测-开奖比对次数',checked],['最高红球命中数',best],['至少命中一球的比对',any],['蓝球命中次数',blue]].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
+ $('statsHint').textContent=checked?`命中率统计以每组预测对每一期已录入开奖分别比对；同一预测可能对应多个开奖期。`: '保存预测并录入开奖结果后，这里会显示统计。';
+ $('hitList').innerHTML=Object.keys(hitLevels).length?Object.entries(hitLevels).map(([k,v])=>`<div class="recordtop"><span>${k}</span><b>${v} 次</b></div>`).join(''):'<div class="empty">目前没有命中记录</div>';
+}
+function renderAll(){renderPredictions();renderDraws();renderStats()}
+document.querySelectorAll('.tab').forEach(b=>b.addEventListener('click',()=>{document.querySelectorAll('.tab,.panel').forEach(x=>x.classList.remove('active'));b.classList.add('active');$(b.dataset.tab).classList.add('active')}));
+$('generate').addEventListener('click',generate);$('savePrediction').addEventListener('click',savePrediction);$('saveDraw').addEventListener('click',saveDraw);
+$('export').addEventListener('click',()=>{const blob=new Blob([JSON.stringify({version:1,exportedAt:new Date().toISOString(),...data},null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(blob);a.download='ssq-lab-backup-'+new Date().toISOString().slice(0,10)+'.json';a.click();URL.revokeObjectURL(a.href);$('backupMsg').textContent='备份文件已生成。'});
+$('importFile').addEventListener('change',async e=>{const f=e.target.files[0];if(!f)return;try{const x=JSON.parse(await f.text());if(!Array.isArray(x.predictions)||!Array.isArray(x.draws))throw Error('格式不正确');if(!confirm('导入会覆盖当前本机数据，确定继续吗？'))return;data={predictions:x.predictions,draws:x.draws};persist();$('backupMsg').textContent='恢复成功。'}catch(err){$('backupMsg').textContent='导入失败：文件格式不正确。'}e.target.value=''});
+$('clearData').addEventListener('click',()=>{if(confirm('确定清空全部预测和开奖数据吗？此操作不可撤销。')){data={predictions:[],draws:[]};persist();$('backupMsg').textContent='本机数据已清空。'}});
+if('serviceWorker' in navigator && location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
+load();renderAll();
+</script>
+</body></html>
