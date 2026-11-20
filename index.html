@@ -144,4 +144,69 @@ $('clearData').addEventListener('click',()=>{if(confirm('确定清空全部预�
 if('serviceWorker' in navigator && location.protocol.startsWith('http'))window.addEventListener('load',()=>navigator.serviceWorker.register('./sw.js').catch(()=>{}));
 load();renderAll();
 </script>
+<script>
+(function(){
+ const panel=document.querySelector('#draws');
+ if(!panel)return;
+ const actions=panel.querySelector('.actions');
+ if(!actions)return;
+
+ const btn=document.createElement('button');
+ btn.className='blue';
+ btn.textContent='同步官方开奖';
+
+ const msg=document.createElement('p');
+ msg.className='hint';
+ msg.textContent='点击后读取官方开奖数据，不会删除你的预测记录。';
+
+ actions.appendChild(btn);
+ actions.after(msg);
+
+ btn.addEventListener('click',async()=>{
+  msg.textContent='正在读取官方开奖数据…';
+  try{
+   const response=await fetch('./data/draws.json?ts='+Date.now(),{cache:'no-store'});
+   if(!response.ok)throw new Error('官方数据文件暂时无法读取');
+
+   const official=await response.json();
+   if(!Array.isArray(official)||!official.length)
+    throw new Error('官方数据格式不正确');
+
+   const merged=new Map(data.draws.map(d=>[String(d.issue),d]));
+   let added=0,updated=0;
+
+   official.forEach(d=>{
+    if(!/^20\d{5}$/.test(String(d.issue))||
+       !Array.isArray(d.red)||d.red.length!==6||
+       new Set(d.red).size!==6||
+       d.red.some(n=>!Number.isInteger(n)||n<1||n>33)||
+       !Number.isInteger(d.blue)||d.blue<1||d.blue>16)return;
+
+    const issue=String(d.issue);
+    const existed=merged.has(issue);
+
+    merged.set(issue,{
+     issue,
+     red:d.red.slice().sort((a,b)=>a-b),
+     blue:d.blue,
+     created:d.date?Date.parse(d.date+'T12:00:00+08:00'):Date.now(),
+     date:d.date||''
+    });
+
+    if(existed)updated++;
+    else added++;
+   });
+
+   data.draws=Array.from(merged.values())
+    .sort((a,b)=>String(b.issue).localeCompare(String(a.issue)));
+
+   persist();
+   msg.textContent='同步完成：新增 '+added+' 期，更新 '+updated+' 期；原有其他记录和预测已保留。';
+  }catch(e){
+   msg.textContent='同步失败：'+e.message+'。原有本机数据没有改变。';
+  }
+ });
+})();
+</script>
+
 </body></html>
