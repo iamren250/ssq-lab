@@ -126,7 +126,7 @@ function renderPredictions(){
  el.innerHTML=data.predictions.map(p=>{const found=data.draws.map(d=>({d,m:match(p,d)})).filter(x=>x.m.level!=='未中奖'||x.d);return `<div class="record"><div class="recordtop"><b>${fmt(p.created)}</b><span class="small">${data.draws.length?'已按现有开奖数据核对':'等待开奖数据'}</span></div>${balls(p.red,p.blue)}<div class="small">${data.draws.length?data.draws.map(d=>{const m=match(p,d);return `${d.issue}期：红球中${m.r}个，${m.b?'蓝球命中':'蓝球未中'} · ${m.level}`}).join('<br>'):'暂无可核对的开奖数据'}</div></div>`}).join('')
 }
 function renderDraws(){const el=$('drawList');if(!data.draws.length){el.innerHTML='<div class="empty">还没有录入开奖结果</div>';return}
-el.innerHTML=data.draws.map(d=>`<div class="record"><div class="recordtop"><b>第 ${d.issue} 期</b><span class="small">${fmt(d.created)}</span></div>${balls(d.red,d.blue)}</div>`).join('')}
+el.innerHTML=data.draws.map(d=>`<div class="record"><div class="recordtop"><b>第 ${d.issue} 期</b><span class="small">${d.source==='official'?'正式开奖':'测试数据'} · ${fmt(d.created)}</span></div>${balls(d.red,d.blue)}</div>`).join('')}
 function renderStats(){
   const officialDraws=data.draws.filter(d=>d.source==='official');
  const total=data.predictions.length,draws=officialDraws.length,checked=total*draws;
