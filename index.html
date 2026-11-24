@@ -116,7 +116,7 @@ function saveDraw(){
  if(red.length!==6||red.some(n=>!Number.isInteger(n)||n<1||n>33)||new Set(red).size!==6){$('drawMsg').textContent='红球必须是 6 个不重复的 01–33 数字。';return}
  if(!Number.isInteger(blue)||blue<1||blue>16){$('drawMsg').textContent='蓝球必须是 01–16 的一个数字。';return}
  red.sort((a,b)=>a-b);
- const item={issue,red,blue,created:Date.now(),source:'test'},idx=data.draws.findIndex(d=>d.issue===issue);
+ const item={issue,red,blue,created:Date.now(),source:'test'},idx=data.draws.findIndex(d=>d.issue===issue&&d.source!=='official');
  if(idx>=0)data.draws[idx]=item;else data.draws.unshift(item);
  data.draws.sort((a,b)=>String(b.issue).localeCompare(String(a.issue),'zh'));
  persist();$('drawMsg').textContent=`第 ${issue} 期已保存，已自动核对历史预测。`;
@@ -178,7 +178,7 @@ load();renderAll();
    if(!Array.isArray(official)||!official.length)
     throw new Error('官方数据格式不正确');
 
-   const merged=new Map(data.draws.map(d=>[String(d.issue),d]));
+   const merged=new Map(data.draws.map(d=>[String(d.issue)+':'+(d.source==='official'?'official':'test'),d]));
    let added=0,updated=0;
 
    official.forEach(d=>{
@@ -189,10 +189,11 @@ load();renderAll();
        !Number.isInteger(d.blue)||d.blue<1||d.blue>16)return;
 
     const issue=String(d.issue);
-    const existed=merged.has(issue);
-    const old=merged.get(issue);
+const key=issue+':official';
+const existed=merged.has(key);
+const old=merged.get(key);
 
-    merged.set(issue,{
+    merged.set(key,{
      issue,
      red:d.red.slice().sort((a,b)=>a-b),
      blue:d.blue,
