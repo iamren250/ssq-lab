@@ -120,10 +120,37 @@ function saveDraw(){
  if(idx>=0)data.draws[idx]=item;else data.draws.unshift(item);
  data.draws.sort((a,b)=>String(b.issue).localeCompare(String(a.issue),'zh'));
  persist();$('drawMsg').textContent=`第 ${issue} 期已保存，已自动核对历史预测。`;
-}
 function renderPredictions(){
- const el=$('predictionList');if(!data.predictions.length){el.innerHTML='<div class="empty">还没有保存预测号码</div>';return}
- el.innerHTML=data.predictions.map(p=>{const found=data.draws.map(d=>({d,m:match(p,d)})).filter(x=>x.m.level!=='未中奖'||x.d);return `<div class="record"><div class="recordtop"><b>${fmt(p.created)}</b><span class="small">${data.draws.length?'已按现有开奖数据核对':'等待开奖数据'}</span></div>${balls(p.red,p.blue)}<div class="small">${data.draws.length?data.draws.map(d=>{const m=match(p,d);return `${d.issue}期：红球中${m.r}个，${m.b?'蓝球命中':'蓝球未中'} · ${m.level}`}).join('<br>'):'暂无可核对的开奖数据'}</div></div>`}).join('')
+ const el=$('predictionList');
+ if(!data.predictions.length){
+  el.innerHTML='<div class="empty">还没有保存预测号码</div>';
+  return;
+ }
+
+ const officialDraws=data.draws.filter(d=>d.source==='official');
+ const testDraws=data.draws.filter(d=>d.source!=='official');
+
+ function renderGroup(title,draws){
+  if(!draws.length)return `<div class="record"><b>${title}</b><div class="empty">暂无数据</div></div>`;
+  return `<div class="record"><b>${title}</b>`+
+   data.predictions.map(p=>`
+    <div class="record">
+     <div class="recordtop"><b>${fmt(p.created)}</b></div>
+     ${balls(p.red,p.blue)}
+     <div class="small">${
+      draws.map(d=>{
+       const m=match(p,d);
+       return `${d.issue}期：红球中${m.r}个，${m.b?'蓝球命中':'蓝球未中'} · ${m.level}`;
+      }).join('<br>')
+     }</div>
+    </div>
+   `).join('')+
+   '</div>';
+ }
+
+ el.innerHTML=
+  renderGroup('正式开奖核对',officialDraws)+
+  renderGroup('测试数据核对',testDraws);
 }
 function renderDraws(){const el=$('drawList');if(!data.draws.length){el.innerHTML='<div class="empty">还没有录入开奖结果</div>';return}
 el.innerHTML=data.draws.map(d=>`<div class="record"><div class="recordtop"><b>第 ${d.issue} 期</b><span class="small">${d.source==='official'?'正式开奖':'测试数据'} · ${fmt(d.created)}</span></div>${balls(d.red,d.blue)}</div>`).join('')}
