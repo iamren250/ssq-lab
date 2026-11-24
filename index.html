@@ -128,11 +128,12 @@ function renderPredictions(){
 function renderDraws(){const el=$('drawList');if(!data.draws.length){el.innerHTML='<div class="empty">还没有录入开奖结果</div>';return}
 el.innerHTML=data.draws.map(d=>`<div class="record"><div class="recordtop"><b>第 ${d.issue} 期</b><span class="small">${fmt(d.created)}</span></div>${balls(d.red,d.blue)}</div>`).join('')}
 function renderStats(){
- const total=data.predictions.length,draws=data.draws.length,checked=total*draws;
+  const officialDraws=data.draws.filter(d=>d.source==='official');
+ const total=data.predictions.length,draws=officialDraws.length,checked=total*draws;
  let best=0,any=0,blue=0,hitLevels={};
- data.predictions.forEach(p=>data.draws.forEach(d=>{const m=match(p,d);best=Math.max(best,m.r);if(m.r||m.b)any++;if(m.b)blue++;if(m.level!=='未中奖')hitLevels[m.level]=(hitLevels[m.level]||0)+1}));
- $('statsGrid').innerHTML=[['预测组数',total],['已录入开奖期数',draws],['预测-开奖比对次数',checked],['最高红球命中数',best],['至少命中一球的比对',any],['蓝球命中次数',blue]].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
- $('statsHint').textContent=checked?`命中率统计以每组预测对每一期已录入开奖分别比对；同一预测可能对应多个开奖期。`: '保存预测并录入开奖结果后，这里会显示统计。';
+ data.predictions.forEach(p=>officialDraws.forEach(d=>{const m=match(p,d);best=Math.max(best,m.r);if(m.r||m.b)any++;if(m.b)blue++;if(m.level!=='未中奖')hitLevels[m.level]=(hitLevels[m.level]||0)+1}));
+ $('statsGrid').innerHTML=[['预测组数',total],['正式开奖期数',draws],['测试开奖期数',data.draws.length-officialDraws.length],['预测-开奖比对次数',checked],['最高红球命中数',best],['至少命中一球的比对',any],['蓝球命中次数',blue]].map(x=>`<div class="stat"><b>${x[1]}</b><span>${x[0]}</span></div>`).join('');
+ $('statsHint').textContent=checked?'正式命中统计只使用官方开奖数据；测试开奖不会计入正式统计。':'保存预测并同步正式开奖后，这里会显示正式统计。';
  $('hitList').innerHTML=Object.keys(hitLevels).length?Object.entries(hitLevels).map(([k,v])=>`<div class="recordtop"><span>${k}</span><b>${v} 次</b></div>`).join(''):'<div class="empty">目前没有命中记录</div>';
 }
 function renderAll(){renderPredictions();renderDraws();renderStats()}
