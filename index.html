@@ -116,7 +116,7 @@ function saveDraw(){
  if(red.length!==6||red.some(n=>!Number.isInteger(n)||n<1||n>33)||new Set(red).size!==6){$('drawMsg').textContent='红球必须是 6 个不重复的 01–33 数字。';return}
  if(!Number.isInteger(blue)||blue<1||blue>16){$('drawMsg').textContent='蓝球必须是 01–16 的一个数字。';return}
  red.sort((a,b)=>a-b);
- const item={issue,red,blue,created:Date.now()},idx=data.draws.findIndex(d=>d.issue===issue);
+ const item={issue,red,blue,created:Date.now(),source:'test'},idx=data.draws.findIndex(d=>d.issue===issue);
  if(idx>=0)data.draws[idx]=item;else data.draws.unshift(item);
  data.draws.sort((a,b)=>String(b.issue).localeCompare(String(a.issue),'zh'));
  persist();$('drawMsg').textContent=`第 ${issue} 期已保存，已自动核对历史预测。`;
