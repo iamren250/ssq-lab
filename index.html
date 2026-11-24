@@ -120,6 +120,7 @@ function saveDraw(){
  if(idx>=0)data.draws[idx]=item;else data.draws.unshift(item);
  data.draws.sort((a,b)=>String(b.issue).localeCompare(String(a.issue),'zh'));
  persist();$('drawMsg').textContent=`第 ${issue} 期已保存，已自动核对历史预测。`;
+ }
 function renderPredictions(){
  const el=$('predictionList');
  if(!data.predictions.length){
