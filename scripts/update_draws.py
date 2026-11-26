@@ -274,7 +274,7 @@ def main():
         "history_source_count": validation["source_count"],
         "historical_cross_checked": validation["cross_checked"],
         "historical_conflicts": validation["cross_conflicts"],
-        "recent_official_source": "上海福彩",
+        "recent_official_source": "上海福彩 + 广西福彩（双源一致）",
         "recent_official_count": len(latest),
         "recent_conflicts": conflicts
     }
