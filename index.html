@@ -256,4 +256,420 @@ const old=merged.get(key);
 })();
 </script>
 
+
+<script>
+(function(){
+'use strict';
+
+const AUTO_KEY='ssq_lab_auto_v1';
+const NAMES=['随机基准','频率50期','频率100期','频率300期','频率全部','冷热50期','冷热100期','冷热300期','冷热全部','均衡组合'];
+
+let batches=[];
+try{
+ const saved=JSON.parse(localStorage.getItem(AUTO_KEY)||'[]');
+ if(Array.isArray(saved))batches=saved;
+}catch(e){batches=[]}
+
+function save(){
+ localStorage.setItem(AUTO_KEY,JSON.stringify(batches));
+ render();
+}
+function officialDraws(){
+ return data.draws
+  .filter(d=>d.source==='official'&&Array.isArray(d.red)&&d.red.length===6)
+  .slice()
+  .sort((a,b)=>Number(a.issue)-Number(b.issue));
+}
+function hashSeed(s){
+ let h=2166136261;
+ for(let i=0;i<s.length;i++){
+  h^=s.charCodeAt(i);
+  h=Math.imul(h,16777619);
+ }
+ return h>>>0;
+}
+function rng(seed){
+ let x=seed>>>0;
+ return function(){
+  x+=0x6D2B79F5;
+  let t=x;
+  t=Math.imul(t^(t>>>15),t|1);
+  t^=t+Math.imul(t^(t>>>7),t|61);
+  return ((t^(t>>>14))>>>0)/4294967296;
+ };
+}
+function shuffled(arr,random){
+ let a=arr.slice();
+ for(let i=a.length-1;i>0;i--){
+  let j=Math.floor(random()*(i+1));
+  [a[i],a[j]]=[a[j],a[i]];
+ }
+ return a;
+}
+function randomPick(arr,n,random){
+ return shuffled(arr,random).slice(0,n).sort((a,b)=>a-b);
+}
+function counts(history,max,field){
+ let c=Array(max+1).fill(0);
+ history.forEach(d=>{
+  if(field==='red')d.red.forEach(n=>c[n]++);
+  else c[d.blue]++;
+ });
+ return c;
+}
+function rankNumbers(c,max,descending){
+ let a=[];
+ for(let i=1;i<=max;i++)a.push(i);
+ a.sort((x,y)=>{
+  let diff=descending?c[y]-c[x]:c[x]-c[y];
+  return diff||x-y;
+ });
+ return a;
+}
+function makePrediction(type,history,issue){
+ const random=rng(hashSeed(type+'|'+issue));
+ if(type==='random'){
+  return {
+   red:randomPick(Array.from({length:33},(_,i)=>i+1),6,random),
+   blue:1+Math.floor(random()*16)
+  };
+ }
+ if(type==='balanced'){
+  const zones=[[1,11],[12,22],[23,33]];
+  let red=[],tries=0;
+  do{
+   red=[];
+   zones.forEach(([a,b])=>{
+    red.push(...randomPick(Array.from({length:b-a+1},(_,i)=>a+i),2,random));
+   });
+   tries++;
+  }while(red.filter(n=>n%2===1).length!==3&&tries<100);
+  return {red:red.sort((a,b)=>a-b),blue:1+Math.floor(random()*16)};
+ }
+ const rc=counts(history,33,'red');
+ const bc=counts(history,16,'blue');
+ if(type==='frequency'){
+  return {
+   red:rankNumbers(rc,33,true).slice(0,6).sort((a,b)=>a-b),
+   blue:rankNumbers(bc,16,true)[0]
+  };
+ }
+ const hot=rankNumbers(rc,33,true).slice(0,3);
+ const cold=rankNumbers(rc,33,false).slice(0,3);
+ return {
+  red:[...hot,...cold].sort((a,b)=>a-b),
+  blue:rankNumbers(bc,16,true)[0]
+ };
+}
+function makeAll(history,issue){
+ const result=[];
+ result.push(makePrediction('random',history,issue));
+ [50,100,300,'全部'].forEach(w=>{
+  const h=w==='全部'?history:history.slice(-w);
+  result.push(makePrediction('frequency',h,issue));
+ });
+ [50,100,300,'全部'].forEach(w=>{
+  const h=w==='全部'?history:history.slice(-w);
+  result.push(makePrediction('hotcold',h,issue));
+ });
+ result.push(makePrediction('balanced',history,issue));
+ return result;
+}
+function nextIssue(issue){
+ const s=String(issue);
+ const year=Number(s.slice(0,4));
+ const number=Number(s.slice(4));
+ if(number>=200)return String(year+1)+'001';
+ return String(year)+String(number+1).padStart(3,'0');
+}
+function makeBatch(history){
+ const latest=history[history.length-1];
+ const target=nextIssue(latest.issue);
+ if(batches.some(b=>b.issue===target))return;
+ const predictions=makeAll(history,target);
+ batches.push({
+  issue:target,
+  baseIssue:String(latest.issue),
+  created:Date.now(),
+  groups:predictions.map((p,i)=>({
+   name:NAMES[i],red:p.red,blue:p.blue
+  })),
+  status:'pending'
+ });
+ save();
+}
+function compareBatch(batch,draw){
+ batch.result=batch.groups.map(g=>({
+  red:g.red.filter(n=>draw.red.includes(n)).length,
+  blue:g.blue===draw.blue
+ }));
+ batch.status='checked';
+ batch.checkedAt=Date.now();
+}
+function refresh(){
+ const history=officialDraws();
+ if(history.length<300)return;
+ batches.forEach(b=>{
+  if(b.status==='pending'){
+   const actual=history.find(d=>String(d.issue)===String(b.issue));
+   if(actual)compareBatch(b,actual);
+  }
+ });
+ const latest=history[history.length-1];
+ const target=nextIssue(latest.issue);
+ if(!batches.some(b=>b.issue===target))makeBatch(history);
+ save();
+}
+function balls(red,blue){
+ return red.map(n=>String(n).padStart(2,'0')).join(' ')+' + '+String(blue).padStart(2,'0');
+}
+function render(){
+ const el=document.getElementById('autoExperimentContent');
+ if(!el)return;
+ if(!batches.length){
+  el.innerHTML='<p class="hint">等待官方开奖数据达到300期后生成。</p>';
+  return;
+ }
+ const pending=batches.filter(b=>b.status==='pending').slice(-1);
+ const completed=batches.filter(b=>b.status==='checked').slice(-3).reverse();
+ let html='';
+ pending.forEach(b=>{
+  html+='<div class="notice">待开奖：第 '+b.issue+' 期（依据截至第 '+b.baseIssue+' 期的历史数据生成）</div>';
+  b.groups.forEach(g=>{
+   html+='<div class="record"><b>'+g.name+'</b><div class="small">'+balls(g.red,g.blue)+'</div></div>';
+  });
+ });
+ completed.forEach(b=>{
+  html+='<div class="record"><b>第 '+b.issue+' 期 · 已核对</b>';
+  b.groups.forEach((g,i)=>{
+   const r=b.result[i];
+   html+='<div class="small">'+g.name+'：'+balls(g.red,g.blue)+'；红球命中 '+r.red+' 个，蓝球'+(r.blue?'命中':'未中')+'</div>';
+  });
+  html+='</div>';
+ });
+ el.innerHTML=html;
+}
+const section=document.getElementById('predict');
+if(section){
+ const card=document.createElement('div');
+ card.className='card';
+ card.innerHTML='<h2>自动实验预测</h2><p class="hint">根据已同步的正式开奖自动生成10组预测，并在下一期开奖数据同步后自动核对。实验记录独立保存。</p><div id="autoExperimentContent"></div>';
+ section.appendChild(card);
+}
+const oldPersist=persist;
+persist=function(){
+ oldPersist();
+ refresh();
+};
+refresh();
+})();
+</script>
+
+<script>
+(function(){
+'use strict';
+
+const AUTO_KEY='ssq_lab_auto_v1';
+const NAMES=['随机基准','频率50期','频率100期','频率300期','频率全部','冷热50期','冷热100期','冷热300期','冷热全部','均衡组合'];
+
+let batches=[];
+try{
+ const saved=JSON.parse(localStorage.getItem(AUTO_KEY)||'[]');
+ if(Array.isArray(saved))batches=saved;
+}catch(e){batches=[]}
+
+function save(){
+ localStorage.setItem(AUTO_KEY,JSON.stringify(batches));
+ render();
+}
+function officialDraws(){
+ return data.draws
+  .filter(d=>d.source==='official'&&Array.isArray(d.red)&&d.red.length===6)
+  .slice()
+  .sort((a,b)=>Number(a.issue)-Number(b.issue));
+}
+function hashSeed(s){
+ let h=2166136261;
+ for(let i=0;i<s.length;i++){
+  h^=s.charCodeAt(i);
+  h=Math.imul(h,16777619);
+ }
+ return h>>>0;
+}
+function rng(seed){
+ let x=seed>>>0;
+ return function(){
+  x+=0x6D2B79F5;
+  let t=x;
+  t=Math.imul(t^(t>>>15),t|1);
+  t^=t+Math.imul(t^(t>>>7),t|61);
+  return ((t^(t>>>14))>>>0)/4294967296;
+ };
+}
+function shuffled(arr,random){
+ let a=arr.slice();
+ for(let i=a.length-1;i>0;i--){
+  let j=Math.floor(random()*(i+1));
+  [a[i],a[j]]=[a[j],a[i]];
+ }
+ return a;
+}
+function randomPick(arr,n,random){
+ return shuffled(arr,random).slice(0,n).sort((a,b)=>a-b);
+}
+function counts(history,max,field){
+ let c=Array(max+1).fill(0);
+ history.forEach(d=>{
+  if(field==='red')d.red.forEach(n=>c[n]++);
+  else c[d.blue]++;
+ });
+ return c;
+}
+function rankNumbers(c,max,descending){
+ let a=[];
+ for(let i=1;i<=max;i++)a.push(i);
+ a.sort((x,y)=>{
+  let diff=descending?c[y]-c[x]:c[x]-c[y];
+  return diff||x-y;
+ });
+ return a;
+}
+function makePrediction(type,history,issue){
+ const random=rng(hashSeed(type+'|'+issue));
+ if(type==='random'){
+  return {
+   red:randomPick(Array.from({length:33},(_,i)=>i+1),6,random),
+   blue:1+Math.floor(random()*16)
+  };
+ }
+ if(type==='balanced'){
+  const zones=[[1,11],[12,22],[23,33]];
+  let red=[],tries=0;
+  do{
+   red=[];
+   zones.forEach(([a,b])=>{
+    red.push(...randomPick(Array.from({length:b-a+1},(_,i)=>a+i),2,random));
+   });
+   tries++;
+  }while(red.filter(n=>n%2===1).length!==3&&tries<100);
+  return {red:red.sort((a,b)=>a-b),blue:1+Math.floor(random()*16)};
+ }
+ const rc=counts(history,33,'red');
+ const bc=counts(history,16,'blue');
+ if(type==='frequency'){
+  return {
+   red:rankNumbers(rc,33,true).slice(0,6).sort((a,b)=>a-b),
+   blue:rankNumbers(bc,16,true)[0]
+  };
+ }
+ const hot=rankNumbers(rc,33,true).slice(0,3);
+ const cold=rankNumbers(rc,33,false).slice(0,3);
+ return {
+  red:[...hot,...cold].sort((a,b)=>a-b),
+  blue:rankNumbers(bc,16,true)[0]
+ };
+}
+function makeAll(history,issue){
+ const result=[];
+ result.push(makePrediction('random',history,issue));
+ [50,100,300,'全部'].forEach(w=>{
+  const h=w==='全部'?history:history.slice(-w);
+  result.push(makePrediction('frequency',h,issue));
+ });
+ [50,100,300,'全部'].forEach(w=>{
+  const h=w==='全部'?history:history.slice(-w);
+  result.push(makePrediction('hotcold',h,issue));
+ });
+ result.push(makePrediction('balanced',history,issue));
+ return result;
+}
+function nextIssue(issue){
+ const s=String(issue);
+ const year=Number(s.slice(0,4));
+ const number=Number(s.slice(4));
+ if(number>=200)return String(year+1)+'001';
+ return String(year)+String(number+1).padStart(3,'0');
+}
+function makeBatch(history){
+ const latest=history[history.length-1];
+ const target=nextIssue(latest.issue);
+ if(batches.some(b=>b.issue===target))return;
+ const predictions=makeAll(history,target);
+ batches.push({
+  issue:target,
+  baseIssue:String(latest.issue),
+  created:Date.now(),
+  groups:predictions.map((p,i)=>({
+   name:NAMES[i],red:p.red,blue:p.blue
+  })),
+  status:'pending'
+ });
+ save();
+}
+function compareBatch(batch,draw){
+ batch.result=batch.groups.map(g=>({
+  red:g.red.filter(n=>draw.red.includes(n)).length,
+  blue:g.blue===draw.blue
+ }));
+ batch.status='checked';
+ batch.checkedAt=Date.now();
+}
+function refresh(){
+ const history=officialDraws();
+ if(history.length<300)return;
+ batches.forEach(b=>{
+  if(b.status==='pending'){
+   const actual=history.find(d=>String(d.issue)===String(b.issue));
+   if(actual)compareBatch(b,actual);
+  }
+ });
+ const latest=history[history.length-1];
+ const target=nextIssue(latest.issue);
+ if(!batches.some(b=>b.issue===target))makeBatch(history);
+ save();
+}
+function balls(red,blue){
+ return red.map(n=>String(n).padStart(2,'0')).join(' ')+' + '+String(blue).padStart(2,'0');
+}
+function render(){
+ const el=document.getElementById('autoExperimentContent');
+ if(!el)return;
+ if(!batches.length){
+  el.innerHTML='<p class="hint">等待官方开奖数据达到300期后生成。</p>';
+  return;
+ }
+ const pending=batches.filter(b=>b.status==='pending').slice(-1);
+ const completed=batches.filter(b=>b.status==='checked').slice(-3).reverse();
+ let html='';
+ pending.forEach(b=>{
+  html+='<div class="notice">待开奖：第 '+b.issue+' 期（依据截至第 '+b.baseIssue+' 期的历史数据生成）</div>';
+  b.groups.forEach(g=>{
+   html+='<div class="record"><b>'+g.name+'</b><div class="small">'+balls(g.red,g.blue)+'</div></div>';
+  });
+ });
+ completed.forEach(b=>{
+  html+='<div class="record"><b>第 '+b.issue+' 期 · 已核对</b>';
+  b.groups.forEach((g,i)=>{
+   const r=b.result[i];
+   html+='<div class="small">'+g.name+'：'+balls(g.red,g.blue)+'；红球命中 '+r.red+' 个，蓝球'+(r.blue?'命中':'未中')+'</div>';
+  });
+  html+='</div>';
+ });
+ el.innerHTML=html;
+}
+const section=document.getElementById('predict');
+if(section){
+ const card=document.createElement('div');
+ card.className='card';
+ card.innerHTML='<h2>自动实验预测</h2><p class="hint">根据已同步的正式开奖自动生成10组预测，并在下一期开奖数据同步后自动核对。实验记录独立保存。</p><div id="autoExperimentContent"></div>';
+ section.appendChild(card);
+}
+const oldPersist=persist;
+persist=function(){
+ oldPersist();
+ refresh();
+};
+refresh();
+})();
+</script>
 </body></html>
