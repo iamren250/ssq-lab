@@ -1,0 +1,248 @@
+
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>双色球历史回测实验室</title>
+<style>
+body{font-family:-apple-system,BlinkMacSystemFont,sans-serif;background:#f4f5f7;color:#222;margin:0;padding:16px}
+main{max-width:900px;margin:auto}
+h1{font-size:22px}
+.card{background:white;border-radius:12px;padding:15px;margin:12px 0}
+button{background:#b3262d;color:white;border:0;padding:12px 18px;border-radius:8px;font-size:15px}
+.small{font-size:12px;color:#777;line-height:1.7}
+.status{font-size:14px;line-height:1.8}
+table{width:100%;border-collapse:collapse;font-size:12px}
+th,td{padding:9px 5px;border-bottom:1px solid #eee;text-align:center}
+th{background:#f6f6f6}
+.wrap{overflow-x:auto}
+h2{font-size:17px}
+.good{color:#167b42}
+</style>
+</head>
+<body>
+<main>
+<h1>双色球历史回测实验室</h1>
+<p class="small">独立实验页面｜只读取官方历史开奖｜不修改原预测记录</p>
+
+<div class="card">
+<h2>实验设置</h2>
+<div class="status">
+实验算法：随机基准、历史频率、冷热组合、均衡组合<br>
+历史窗口：50期、100期、300期、全部历史<br>
+验证方式：滚动验证，只使用当期开奖之前的数据<br>
+正式回测：从第301期开始
+</div>
+<p><button onclick="runBacktest()">开始历史回测</button></p>
+<div id="status" class="status">等待开始</div>
+</div>
+
+<div class="card">
+<h2>总体实验结果</h2>
+<div id="summary" class="wrap">尚未运行</div>
+</div>
+
+<div class="card">
+<h2>红球命中分布</h2>
+<div id="distribution" class="wrap">尚未运行</div>
+</div>
+
+<div class="card">
+<h2>每20期阶段表现</h2>
+<div id="stages" class="wrap">尚未运行</div>
+</div>
+
+<div class="card">
+<h2>实验说明</h2>
+<p class="small">
+1. 随机算法只作为比较基准，不参与优化。<br>
+2. 历史频率算法选择过去窗口内出现次数最多的号码。<br>
+3. 冷热算法选择出现次数最多的3个红球和最少的3个红球。<br>
+4. 均衡算法要求低、中、高三区各选2个红球，并尽量保持奇偶各3个。<br>
+5. 蓝球命中单独统计。<br>
+6. 回测成绩不代表未来中奖概率。
+</p>
+</div>
+</main>
+
+<script>
+const WINDOWS=[50,100,300,'全部'];
+const NAMES=['随机基准','频率50期','频率100期','频率300期','频率全部','冷热50期','冷热100期','冷热300期','冷热全部','均衡组合'];
+const GROUPS=NAMES.length;
+
+function hashSeed(s){
+ let h=2166136261;
+ for(let i=0;i<s.length;i++){
+  h^=s.charCodeAt(i);
+  h=Math.imul(h,16777619);
+ }
+ return h>>>0;
+}
+function rng(seed){
+ let x=seed>>>0;
+ return function(){
+  x+=0x6D2B79F5;
+  let t=x;
+  t=Math.imul(t^(t>>>15),t|1);
+  t^=t+Math.imul(t^(t>>>7),t|61);
+  return ((t^(t>>>14))>>>0)/4294967296;
+ };
+}
+function shuffled(arr,random){
+ let a=arr.slice();
+ for(let i=a.length-1;i>0;i--){
+  let j=Math.floor(random()*(i+1));
+  [a[i],a[j]]=[a[j],a[i]];
+ }
+ return a;
+}
+function randomPick(arr,n,random){
+ return shuffled(arr,random).slice(0,n).sort((a,b)=>a-b);
+}
+function counts(history,max,field){
+ let c=Array(max+1).fill(0);
+ history.forEach(d=>{
+  if(field==='red')d.red.forEach(n=>c[n]++);
+  else c[d.blue]++;
+ });
+ return c;
+}
+function rankNumbers(c,max,descending){
+ let a=[];
+ for(let i=1;i<=max;i++)a.push(i);
+ a.sort((x,y)=>{
+  let diff=descending?c[y]-c[x]:c[x]-c[y];
+  return diff||x-y;
+ });
+ return a;
+}
+function makePrediction(type,history,issue){
+ const random=rng(hashSeed(type+'|'+issue));
+ if(type==='random'){
+  return {red:randomPick(Array.from({length:33},(_,i)=>i+1),6,random),blue:1+Math.floor(random()*16)};
+ }
+ if(type==='balanced'){
+  const zones=[[1,11],[12,22],[23,33]];
+  let red=[],tries=0;
+  do{
+   red=[];
+   zones.forEach(([a,b])=>{
+    red.push(...randomPick(Array.from({length:b-a+1},(_,i)=>a+i),2,random));
+   });
+   tries++;
+  }while(red.filter(n=>n%2===1).length!==3&&tries<100);
+  return {red:red.sort((a,b)=>a-b),blue:1+Math.floor(random()*16)};
+ }
+ const rc=counts(history,33,'red');
+ const bc=counts(history,16,'blue');
+ if(type==='frequency'){
+  return {red:rankNumbers(rc,33,true).slice(0,6).sort((a,b)=>a-b),blue:rankNumbers(bc,16,true)[0]};
+ }
+ const hot=rankNumbers(rc,33,true).slice(0,3);
+ const cold=rankNumbers(rc,33,false).slice(0,3);
+ return {red:[...hot,...cold].sort((a,b)=>a-b),blue:rankNumbers(bc,16,true)[0]};
+}
+function makeAll(history,issue){
+ const result=[];
+ const all=history;
+ const rand=makePrediction('random',all,issue);
+ result.push(rand);
+ [50,100,300,'全部'].forEach(w=>{
+  const h=w==='全部'?all:all.slice(-w);
+  result.push(makePrediction('frequency',h,issue));
+ });
+ [50,100,300,'全部'].forEach(w=>{
+  const h=w==='全部'?all:all.slice(-w);
+  result.push(makePrediction('hotcold',h,issue));
+ });
+ result.push(makePrediction('balanced',all,issue));
+ return result;
+}
+function compare(p,d){
+ const red=p.red.filter(n=>d.red.includes(n)).length;
+ return {red,blue:p.blue===d.blue};
+}
+function newStat(name){
+ return {name,total:0,redSum:0,blue:0,dist:[0,0,0,0,0,0,0],fourPlus:0,best:0};
+}
+function addStat(s,m){
+ s.total++;
+ s.redSum+=m.red;
+ s.blue+=m.blue?1:0;
+ s.dist[m.red]++;
+ if(m.red>=4)s.fourPlus++;
+ if(m.red>s.best)s.best=m.red;
+}
+function table(headers,rows){
+ return '<table><thead><tr>'+headers.map(x=>'<th>'+x+'</th>').join('')+'</tr></thead><tbody>'+
+ rows.map(r=>'<tr>'+r.map(x=>'<td>'+x+'</td>').join('')+'</tr>').join('')+'</tbody></table>';
+}
+async function runBacktest(){
+ const status=document.getElementById('status');
+ status.textContent='正在读取官方历史开奖数据……';
+ try{
+  const response=await fetch('./data/draws.json?backtest='+Date.now());
+  if(!response.ok)throw new Error('读取开奖文件失败：'+response.status);
+  let draws=await response.json();
+  draws=draws.filter(d=>d.issue&&Array.isArray(d.red)&&d.red.length===6&&Number.isInteger(Number(d.blue)));
+  draws.sort((a,b)=>Number(a.issue)-Number(b.issue));
+  if(draws.length<301)throw new Error('有效开奖数据不足301期');
+  const stats=NAMES.map(newStat);
+  const stages=[];
+  let stageStats=NAMES.map(newStat);
+  let stageStart=301;
+  let tested=0;
+  for(let i=300;i<draws.length;i++){
+   const actual=draws[i];
+   const history=draws.slice(0,i);
+   const predictions=makeAll(history,actual.issue);
+   predictions.forEach((p,k)=>{
+    const m=compare(p,actual);
+    addStat(stats[k],m);
+    addStat(stageStats[k],m);
+   });
+   tested++;
+   if(tested%20===0||i===draws.length-1){
+    stages.push({start:stageStart,end:tested,stats:stageStats});
+    stageStats=NAMES.map(newStat);
+    stageStart=tested+1;
+   }
+   if(tested%500===0){
+    status.textContent='已完成 '+tested+' / '+(draws.length-300)+' 期……';
+    await new Promise(resolve=>setTimeout(resolve,0));
+   }
+  }
+  showResults(stats,stages,draws.length,tested);
+  status.innerHTML='<span class="good">回测完成。</span><br>历史开奖：'+draws.length+'期；实际验证：'+tested+'期。';
+ }catch(e){
+  status.textContent='运行失败：'+e.message+'。请检查页面是否通过GitHub Pages打开。';
+ }
+}
+function showResults(stats,stages,total,tested){
+ const rows=stats.map(s=>[
+  s.name,s.total,(s.redSum/s.total).toFixed(3),
+  s.blue,s.fourPlus,s.best
+ ]);
+ document.getElementById('summary').innerHTML=
+ '<p class="small">历史开奖 '+total+' 期；共同验证 '+tested+' 期。平均红球命中数越高，代表本次历史样本表现越好。</p>'+
+ table(['实验组','验证期数','平均红球命中','蓝球命中','红球≥4个','最高命中'],rows);
+ const distRows=stats.map(s=>[s.name,...s.dist]);
+ document.getElementById('distribution').innerHTML=
+ table(['实验组','0个','1个','2个','3个','4个','5个','6个'],distRows);
+ let stageRows=[];
+ stages.forEach((st,i)=>{
+  st.stats.forEach((s,k)=>{
+   stageRows.push([
+    (i+1)+'（'+st.start+'-'+st.end+'）',
+    s.name,s.total?s.total:'-',s.total?(s.redSum/s.total).toFixed(2):'-',
+    s.blue,s.fourPlus
+   ]);
+  });
+ });
+ document.getElementById('stages').innerHTML=
+ table(['阶段','实验组','期数','平均红球命中','蓝球命中','红球≥4个'],stageRows);
+}
+</script>
+</body>
+</html>
