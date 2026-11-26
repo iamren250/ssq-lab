@@ -191,7 +191,7 @@ async function runBacktest(){
   const stats=NAMES.map(newStat);
   const stages=[];
   let stageStats=NAMES.map(newStat);
-  let stageStart=301;
+  let stageStart=1;
   let tested=0;
   for(let i=300;i<draws.length;i++){
    const actual=draws[i];
