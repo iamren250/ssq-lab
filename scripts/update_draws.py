@@ -14,7 +14,7 @@ REPORT = Path("data/validation.json")
 HISTORY_URL = "https://raw.githubusercontent.com/cs4745/PickWise/main/data/ssq.csv"
 VALIDATION_URL = "https://raw.githubusercontent.com/cs4745/PickWise/main/data/validation.json"
 LATEST_URL = "https://www.swlc.net.cn/lottery/ssq.html?limit=100&view=previous"
-
+GUANGXI_URL = "https://www.gxcaipiao.com.cn/notice/list/ssq/1.html"
 
 def fetch(url):
     last_error = None
@@ -167,12 +167,66 @@ def load_latest():
 
     return draws
 
+def load_guangxi():
+    html = fetch(GUANGXI_URL).decode("utf-8", errors="replace")
+    parser = TableParser()
+    parser.feed(html)
+    draws = {}
 
+    for row in parser.rows:
+        if len(row) < 3:
+            continue
+
+        issue = row[0].strip()
+        if not re.fullmatch(r"20\d{5}", issue):
+            continue
+
+        date_match = re.search(r"20\d{2}-\d{2}-\d{2}", row[1])
+        nums = [int(x) for x in re.findall(r"\d+", row[2])]
+
+        if not date_match or len(nums) != 7:
+            continue
+
+        red = nums[:6]
+        blue = nums[6]
+
+        if not valid(issue, red, blue):
+            continue
+
+        draws[issue] = {
+            "issue": issue,
+            "date": date_match.group(),
+            "red": sorted(red),
+            "blue": blue
+        }
+
+    if not draws:
+        raise RuntimeError("广西福彩数据读取失败")
+
+    return draws
 def main():
     history = load_history()
     validation = load_history_validation()
     latest = load_latest()
+    guangxi = load_guangxi()
+    verified_latest = {}
 
+    for issue, official in latest.items():
+        if issue not in guangxi:
+            continue
+
+        other = guangxi[issue]
+        if official["red"] != other["red"] or official["blue"] != other["blue"]:
+            raise RuntimeError(f"上海福彩与广西福彩号码冲突：{issue}")
+
+        verified_latest[issue] = official
+
+    if len(verified_latest) < 10:
+        raise RuntimeError(
+            f"两地交叉核验期数不足：{len(verified_latest)}期，停止更新"
+        )
+
+    latest = verified_latest
     conflicts = []
     for issue, official in latest.items():
         if issue in history:
